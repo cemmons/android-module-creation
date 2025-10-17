@@ -34,7 +34,7 @@ def add_module_to_settings(module_name):
         # Extraer módulos existentes y separar las otras líneas
         for line in lines:
             # Verifica si la línea comienza con 'include' (ignorando espacios)
-            if line.strip().startswith('include'):
+            if line.strip().startswith('include('):
                 # Busca patrones como (":module:submodule") o ("module") y captura solo el nombre
                 found = re.findall(r"['\"]:?([\w.:-]+)['\"]", line)
                 if found:
@@ -54,16 +54,12 @@ def add_module_to_settings(module_name):
             # Escribir las líneas que no son 'include'
             if other_lines:
                 f.write("\n".join(other_lines))
-                f.write("\n\n")
+                f.write("\n")
 
             # Crear una lista de las declaraciones de include con el formato correcto
             include_statements = []
             for mod in sorted_modules:
-                # Usar el formato estándar de Gradle con dos puntos al inicio
-                if is_kts:
-                    include_statements.append(f'include(":{mod}")')
-                else:
-                    include_statements.append(f"include ':{mod}'")
+                include_statements.append(f'include("{mod}")')
 
             # Unir las declaraciones con saltos de línea y escribir al archivo.
             # Esto evita un salto de línea extra al final.

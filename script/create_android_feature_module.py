@@ -2,22 +2,26 @@ import os
 import re
 import sys
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def add_module_to_settings(module_name):
     """
-    Busca un archivo settings.gradle o settings.gradle.kts y agrega el nuevo módulo
+    Busca un archivo settings.gradle o settings.gradle.kts en la raíz del proyecto y agrega el nuevo módulo
     en orden alfabético.
     """
     settings_file_path = None
 
-    # Busca el archivo de settings en el directorio actual
-    if os.path.exists('settings.gradle.kts'):
-        settings_file_path = 'settings.gradle.kts'
-    elif os.path.exists('settings.gradle'):
-        settings_file_path = 'settings.gradle'
+    # Busca el archivo de settings en la raíz del proyecto
+    kts_path = os.path.join(PROJECT_ROOT, 'settings.gradle.kts')
+    groovy_path = os.path.join(PROJECT_ROOT, 'settings.gradle')
+
+    if os.path.exists(kts_path):
+        settings_file_path = kts_path
+    elif os.path.exists(groovy_path):
+        settings_file_path = groovy_path
 
     if not settings_file_path:
-        print("\nAdvertencia: No se encontró 'settings.gradle.kts' o 'settings.gradle'.")
+        print(f"\nAdvertencia: No se encontró 'settings.gradle.kts' o 'settings.gradle' en {PROJECT_ROOT}.")
         print(f"Por favor, agrega manualmente 'include(\":{module_name}\")' a tu archivo de settings.")
         return
 
@@ -72,24 +76,31 @@ def add_module_to_settings(module_name):
         print(f"Por favor, agrega manualmente 'include(\":{module_name}\")' a tu archivo.")
 
 
-def create_android_library_structure(feature_name):
+def create_android_library_structure(library_path):
     """
-    Crea la estructura de directorios y archivos para una librería de Android
-    en el directorio actual, con contenido por defecto para algunos archivos.
+    Crea la estructura de directorios para una librería de Android en la raíz del proyecto.
+    Puede manejar submodulos si se provee una ruta como 'parent/child'.
+    """
+    # El nombre para settings.gradle se forma reemplazando '/' por ':'
+    module_name_for_settings = library_path.replace('/', ':')
 
-    Args:
-        feature_name (str): El nombre del directorio raíz para la librería (ej: 'consumer-credit').
-                           Los guiones y espacios se eliminarán para el nombre del paquete.
-    """
-    root_dir = feature_name
+    # La ruta del nuevo módulo es relativa a la raíz del proyecto
+    # Reemplazamos '/' por el separador de directorios del sistema operativo actual
+    root_dir = os.path.join(PROJECT_ROOT, library_path.replace('/', os.sep))
 
     if os.path.exists(root_dir):
         print(f"El directorio '{root_dir}' ya existe en la ubicación actual. Por favor, elige otro nombre.")
         return
 
-    # Convierte el nombre de la librería en un nombre de paquete válido (sin guiones ni espacios)
-    package_name = feature_name.replace('-', '').replace(' ', '')
-    full_namespace = f'cl.bci.sismo.mach.{package_name}'
+    # El nombre del paquete para la estructura de carpetas solo usa la última parte
+    # ej: de 'consumer-credit/score', obtenemos 'score'
+    library_name_base = os.path.basename(library_path)
+    package_name = library_name_base.replace('-', '').replace(' ', '')
+
+    # El namespace para build.gradle.kts se deriva de la ruta completa
+    # ej: de 'consumer-credit/score', obtenemos 'cl.bci.sismo.mach.consumercredit.score'
+    namespace_suffix = '.'.join([part.replace('-', '').replace(' ', '') for part in library_path.split('/')])
+    full_namespace = f'cl.bci.sismo.mach.{namespace_suffix}'
 
     print(f"Creando la librería '{root_dir}'...")
     print(f"El namespace del paquete será: '{full_namespace}'")
@@ -173,10 +184,7 @@ dependencies {{
     implementation(project(":mach-legacy-arch:core"))
     implementation(project(":mach-legacy-arch:core-legacy"))
 
-    testRuntimeOnly(libs.junit.jupiter.engine)
-    testImplementation(libs.coroutines.testing)
-    testImplementation(libs.junit.api)
-    testImplementation(libs.mockk)
+    testImplementation(libs.bundles.testing)
     testImplementation(libs.junit.params)
 }}
 """
@@ -202,42 +210,34 @@ dependencies {{
     ]
 
     try:
-        # Crear los directorios principales
         for dir_path in dirs_to_create:
             full_path = os.path.join(root_dir, dir_path)
             os.makedirs(full_path, exist_ok=True)
 
-        # Crear los archivos con su contenido
         for file_path, content in files_to_create.items():
             full_path = os.path.join(root_dir, file_path)
-
             parent_dir = os.path.dirname(full_path)
             if parent_dir and not os.path.exists(parent_dir):
                 os.makedirs(parent_dir)
-
             with open(full_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
         print(f"\n¡Estructura de la librería creada exitosamente en la carpeta '{root_dir}'!")
-
-        # Agregar el nuevo módulo al archivo settings
-        add_module_to_settings(feature_name)
+        add_module_to_settings(module_name_for_settings)
 
     except OSError as e:
         print(f"\nError al crear la estructura: {e}")
 
 
 if __name__ == "__main__":
-    library_name = ""
-    # Comprobar si se pasó un nombre de librería como argumento de línea de comandos
+    library_path = ""
     if len(sys.argv) > 1:
-        library_name = sys.argv[1]
+        library_path = sys.argv[1]
     else:
-        # Si no, volver al modo interactivo
-        library_name = input("Introduce el nombre para tu nueva librería (ej: consumer-credit): ")
+        library_path = input("Introduce el nombre del módulo (ej: consumer-credit o parent/score): ")
 
-    if library_name:
-        create_android_library_structure(library_name)
+    if library_path:
+        create_android_library_structure(library_path)
     else:
-        print("El nombre de la librería no puede estar vacío. Uso: python create_android_library.py <nombre-de-libreria>")
+        print("El nombre no puede estar vacío. Uso: python script/create_android_library.py <nombre-modulo> o <directorio-padre/nombre-modulo>")
 
